@@ -1,0 +1,715 @@
+swagger: '2.0'
+info:
+  title: API Кинотеатра "Искорка"
+  description: 'API для онлайн-бронирования билетов в кинотеатре для детей и подростков. Версия 1.1.0 расширяет
+    исходный контракт бонусной программой: выпуск карты, применение баллов при бронировании, оплата, начисление
+    и отчётность.'
+  version: 1.1.0
+host: api.iskorka-cinema.ru
+basePath: /v1
+schemes:
+- https
+consumes:
+- application/json
+produces:
+- application/json
+paths:
+  /sessions/{sessionId}/seats:
+    get:
+      summary: Получить информацию о местах на сеанс
+      description: Возвращает карту зала с указанием свободных и занятых мест для конкретного сеанса
+      operationId: getSeatsBySession
+      tags:
+      - Seats
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        description: Уникальный идентификатор сеанса
+        type: integer
+        x-example: 123
+      responses:
+        '200':
+          description: Успешное получение информации о местах
+          schema:
+            $ref: '#/definitions/SeatsResponse'
+        '404':
+          description: Сеанс не найден
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+  /bookings:
+    post:
+      summary: Забронировать место
+      description: Создает новое бронирование на указанное место в сеансе
+      operationId: createBooking
+      tags:
+      - Bookings
+      responses:
+        '201':
+          description: Бронирование успешно создано
+          schema:
+            $ref: '#/definitions/BookingResponse'
+        '400':
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        '404':
+          description: Сеанс не найден
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        '409':
+          description: Конфликт - место уже забронировано
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/CreateBookingRequest'
+  /bookings/{bookingId}:
+    delete:
+      summary: Отменить бронирование
+      description: Отменяет активное бронирование по его идентификатору
+      operationId: cancelBooking
+      tags:
+      - Bookings
+      parameters:
+      - name: bookingId
+        in: path
+        required: true
+        description: Уникальный идентификатор бронирования
+        type: integer
+        x-example: 456
+      responses:
+        '204':
+          description: Бронирование успешно отменено
+        '400':
+          description: Некорректный идентификатор бронирования
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        '404':
+          description: Бронирование не найдено
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        '409':
+          description: Бронирование уже отменено или истекло
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+  /sessions/{sessionId}:
+    patch:
+      summary: Изменить время сеанса (только для администратора)
+      description: Обновляет время начала сеанса. Доступно только администраторам кинотеатра.
+      operationId: updateSessionTime
+      tags:
+      - Sessions
+      security:
+      - adminAuth: []
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        description: Уникальный идентификатор сеанса
+        type: integer
+        x-example: 123
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/UpdateSessionRequest'
+      responses:
+        '200':
+          description: Время сеанса успешно обновлено
+          schema:
+            $ref: '#/definitions/SessionResponse'
+        '400':
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        '404':
+          description: Сеанс не найден
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        '409':
+          description: Конфликт - зал занят в указанное время
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+  /bookings/{bookingId}/payment:
+    post:
+      summary: Оплатить бронирование
+      description: Принимает денежную оплату остатка бронирования. После подтверждения успешной оплаты автоматически
+        начисляет баллы на указанную при бронировании активную карту. Начисление выполняется однократно.
+      operationId: payBooking
+      tags:
+      - Payments
+      parameters:
+      - name: bookingId
+        in: path
+        required: true
+        description: Уникальный идентификатор бронирования
+        type: integer
+        x-example: 456
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/PayBookingRequest'
+      responses:
+        '200':
+          description: Оплата подтверждена; бонусы начислены, если карта была указана
+          schema:
+            $ref: '#/definitions/PaymentResponse'
+        '400':
+          description: Некорректные платёжные данные или сумма
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        '404':
+          description: Бронирование не найдено
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        '409':
+          description: Бронирование уже оплачено, отменено или истекло
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+  /loyalty-cards:
+    post:
+      summary: Оформить бонусную карту
+      description: Добровольно регистрирует бонусную карту. Для идентификации владельца используются имя, телефон
+        и электронная почта клиента, указанные при бронировании.
+      operationId: createLoyaltyCard
+      tags:
+      - Loyalty
+      responses:
+        '201':
+          description: Карта создана
+          schema:
+            $ref: '#/definitions/LoyaltyCardResponse'
+        '400':
+          description: Некорректные данные клиента
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        '409':
+          description: Для указанных контактных данных уже существует карта
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/CreateLoyaltyCardRequest'
+  /loyalty-cards/{cardNumber}:
+    get:
+      summary: Получить информацию о бонусной карте
+      description: Возвращает статус карты и доступный баланс баллов.
+      operationId: getLoyaltyCard
+      tags:
+      - Loyalty
+      parameters:
+      - name: cardNumber
+        in: path
+        required: true
+        description: Номер бонусной карты
+        type: string
+        x-example: ISK-00001234
+      responses:
+        '200':
+          description: Информация о карте
+          schema:
+            $ref: '#/definitions/LoyaltyCardResponse'
+        '404':
+          description: Карта не найдена
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+  /loyalty-cards/{cardNumber}/transactions:
+    get:
+      summary: Получить историю бонусных операций
+      description: Возвращает операции начисления, списания и возврата баллов по карте.
+      operationId: getLoyaltyTransactions
+      tags:
+      - Loyalty
+      parameters:
+      - name: cardNumber
+        in: path
+        required: true
+        type: string
+      - name: from
+        in: query
+        required: false
+        description: Начало периода включительно
+        type: string
+        format: date
+      - name: to
+        in: query
+        required: false
+        description: Конец периода включительно
+        type: string
+        format: date
+      - name: page
+        in: query
+        required: false
+        type: integer
+        minimum: 1
+        default: 1
+      - name: pageSize
+        in: query
+        required: false
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      responses:
+        '200':
+          description: История операций
+          schema:
+            $ref: '#/definitions/BonusTransactionsResponse'
+        '404':
+          description: Карта не найдена
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+  /reports/loyalty/monthly:
+    get:
+      summary: Получить ежемесячный отчёт по бонусной программе
+      description: Административный отчёт за календарный месяц. Показывает долю бронирований с применённой картой
+        и долю стоимости билетов, оплаченной баллами.
+      operationId: getMonthlyLoyaltyReport
+      tags:
+      - Reports
+      security:
+      - adminAuth: []
+      parameters:
+      - name: month
+        in: query
+        required: true
+        description: Отчётный месяц в формате YYYY-MM
+        type: string
+        pattern: ^\\d{4}-(0[1-9]|1[0-2])$
+        x-example: 2026-10
+      responses:
+        '200':
+          description: Ежемесячный отчёт
+          schema:
+            $ref: '#/definitions/MonthlyLoyaltyReport'
+        '400':
+          description: Неверный формат месяца
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        '403':
+          description: Недостаточно прав
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+definitions:
+  CreateBookingRequest:
+    type: object
+    required:
+    - sessionId
+    - seatNumber
+    - customerName
+    - customerPhone
+    - customerEmail
+    properties:
+      sessionId:
+        type: integer
+        description: ID сеанса
+        example: 123
+      seatNumber:
+        type: integer
+        description: Номер места в зале
+        minimum: 1
+        example: 15
+      customerName:
+        type: string
+        description: Полное имя покупателя
+        example: Иван Петров
+        minLength: 2
+        maxLength: 255
+      customerPhone:
+        type: string
+        description: Номер телефона покупателя
+        example: +7 999 123-45-67
+      customerEmail:
+        type: string
+        format: email
+        description: Адрес электронной почты покупателя
+        example: ivan@example.com
+      loyaltyCardNumber:
+        type: string
+        description: Необязательный номер бонусной карты. Если не указан, бронирование оформляется без участия в
+          бонусной программе.
+        minLength: 1
+        maxLength: 32
+        example: ISK-00001234
+      bonusPointsToSpend:
+        type: integer
+        minimum: 0
+        default: 0
+        description: Количество баллов для оплаты бронирования. Не более 50% полной стоимости билета и не более
+          доступного баланса карты.
+        example: 100
+  UpdateSessionRequest:
+    type: object
+    required:
+    - sessionDate
+    - sessionTime
+    properties:
+      sessionDate:
+        type: string
+        format: date
+        description: Новая дата сеанса
+        example: '2026-07-25'
+      sessionTime:
+        type: string
+        format: time
+        description: Новое время начала сеанса
+        example: '18:30:00'
+  SeatsResponse:
+    type: object
+    properties:
+      sessionId:
+        type: integer
+        description: ID сеанса
+        example: 123
+      movieTitle:
+        type: string
+        description: Название фильма
+        example: Приключения Буратино
+      sessionDate:
+        type: string
+        format: date
+        description: Дата сеанса
+        example: '2026-07-25'
+      sessionTime:
+        type: string
+        format: time
+        description: Время начала сеанса
+        example: '14:00:00'
+      totalSeats:
+        type: integer
+        description: Общее количество мест в зале
+        example: 50
+      availableSeats:
+        type: integer
+        description: Количество свободных мест
+        example: 35
+      seats:
+        type: array
+        items:
+          $ref: '#/definitions/SeatInfo'
+  SeatInfo:
+    type: object
+    properties:
+      seatNumber:
+        type: integer
+        description: Номер места
+        example: 15
+      status:
+        type: string
+        enum:
+        - free
+        - booked
+        description: Статус места (свободно или забронировано)
+        example: free
+  BookingResponse:
+    type: object
+    properties:
+      bookingId:
+        type: integer
+        description: Уникальный идентификатор бронирования
+        example: 456
+      sessionId:
+        type: integer
+        description: ID сеанса
+        example: 123
+      seatNumber:
+        type: integer
+        description: Номер забронированного места
+        example: 15
+      customerName:
+        type: string
+        description: Имя покупателя
+        example: Иван Петров
+      customerPhone:
+        type: string
+        description: Телефон покупателя
+        example: +7 999 123-45-67
+      customerEmail:
+        type: string
+        description: Почта покупателя
+        example: ivan@example.com
+      bookingStatus:
+        type: string
+        enum:
+        - active
+        - cancelled
+        - expired
+        description: Статус бронирования
+        example: active
+      bookingDate:
+        type: string
+        format: date-time
+        description: Дата и время создания бронирования
+        example: '2026-07-20T10:30:00Z'
+      ticketPrice:
+        type: number
+        format: float
+        description: Полная стоимость билета до списания баллов
+        example: 350.5
+      loyaltyCardNumber:
+        type: string
+        description: Номер применённой карты; отсутствует, если карта не использовалась
+        example: ISK-00001234
+      bonusPointsSpent:
+        type: integer
+        description: Количество списанных баллов
+        example: 100
+      bonusAmount:
+        type: number
+        format: float
+        description: Сумма, оплаченная баллами (1 балл = 1 рубль)
+        example: 100.0
+      cashAmountDue:
+        type: number
+        format: float
+        description: Сумма, которую необходимо оплатить деньгами
+        example: 250.5
+      paymentStatus:
+        type: string
+        enum:
+        - not_paid
+        - paid
+        - failed
+        - refunded
+        description: Статус оплаты
+  SessionResponse:
+    type: object
+    properties:
+      sessionId:
+        type: integer
+        description: ID сеанса
+        example: 123
+      movieTitle:
+        type: string
+        description: Название фильма
+        example: Приключения Буратино
+      hallNumber:
+        type: integer
+        description: Номер зала
+        example: 2
+      sessionDate:
+        type: string
+        format: date
+        description: Дата сеанса
+        example: '2026-07-25'
+      sessionTime:
+        type: string
+        format: time
+        description: Время начала сеанса
+        example: '18:30:00'
+      totalSeats:
+        type: integer
+        description: Общее количество мест
+        example: 50
+      availableSeats:
+        type: integer
+        description: Количество свободных мест
+        example: 35
+      price:
+        type: number
+        format: float
+        description: Стоимость билета
+        example: 350.5
+  ErrorResponse:
+    type: object
+    properties:
+      code:
+        type: integer
+        description: Код ошибки HTTP
+        example: 404
+      message:
+        type: string
+        description: Сообщение об ошибке
+        example: Ресурс не найден
+  CreateLoyaltyCardRequest:
+    type: object
+    required:
+    - customerName
+    - customerPhone
+    - customerEmail
+    properties:
+      customerName:
+        type: string
+        minLength: 2
+        maxLength: 255
+        example: Иван Петров
+      customerPhone:
+        type: string
+        example: +7 999 123-45-67
+      customerEmail:
+        type: string
+        format: email
+        example: ivan@example.com
+  LoyaltyCardResponse:
+    type: object
+    properties:
+      cardNumber:
+        type: string
+        example: ISK-00001234
+      customerName:
+        type: string
+        example: Иван Петров
+      customerPhone:
+        type: string
+        example: +7 999 123-45-67
+      customerEmail:
+        type: string
+        format: email
+        example: ivan@example.com
+      balance:
+        type: integer
+        minimum: 0
+        description: Текущий баланс бонусных баллов; 1 балл = 1 рубль
+        example: 250
+      status:
+        type: string
+        enum:
+        - active
+        - blocked
+        example: active
+      createdAt:
+        type: string
+        format: date-time
+  PayBookingRequest:
+    type: object
+    required:
+    - paymentMethod
+    properties:
+      paymentMethod:
+        type: string
+        enum:
+        - bank_card
+        - online
+        description: Способ денежной оплаты
+      paymentReference:
+        type: string
+        description: Идентификатор операции платёжного провайдера
+  PaymentResponse:
+    type: object
+    properties:
+      paymentId:
+        type: integer
+        example: 987
+      bookingId:
+        type: integer
+        example: 456
+      ticketPrice:
+        type: number
+        format: float
+        example: 350.5
+      bonusAmount:
+        type: number
+        format: float
+        example: 100.0
+      cashAmountPaid:
+        type: number
+        format: float
+        example: 250.5
+      paymentStatus:
+        type: string
+        enum:
+        - paid
+        - failed
+        example: paid
+      bonusPointsEarned:
+        type: integer
+        description: Начисленные баллы; 10% полной стоимости билета, округление вниз до целого балла
+        example: 35
+      loyaltyBalance:
+        type: integer
+        description: Баланс после начисления; поле отсутствует, если карта не применялась
+        example: 285
+  BonusTransaction:
+    type: object
+    properties:
+      transactionId:
+        type: integer
+      cardNumber:
+        type: string
+      bookingId:
+        type: integer
+      paymentId:
+        type: integer
+      operationType:
+        type: string
+        enum:
+        - accrual
+        - spend
+        - refund
+        - reversal
+      points:
+        type: integer
+        description: Количество баллов операции; направление определяется operationType
+      balanceAfter:
+        type: integer
+      createdAt:
+        type: string
+        format: date-time
+  BonusTransactionsResponse:
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          $ref: '#/definitions/BonusTransaction'
+      page:
+        type: integer
+      pageSize:
+        type: integer
+      total:
+        type: integer
+  MonthlyLoyaltyReport:
+    type: object
+    properties:
+      month:
+        type: string
+        example: 2026-10
+      bookingsTotal:
+        type: integer
+        description: Количество оплаченных бронирований за месяц
+      bookingsWithCard:
+        type: integer
+        description: Количество оплаченных бронирований, в которых использована карта
+      cardUsagePercent:
+        type: number
+        format: float
+        description: bookingsWithCard / bookingsTotal × 100
+      ticketAmountTotal:
+        type: number
+        format: float
+        description: Суммарная полная стоимость билетов до списания баллов
+      bonusAmountTotal:
+        type: number
+        format: float
+        description: Сумма, фактически оплаченная бонусными баллами
+      bonusPaymentPercent:
+        type: number
+        format: float
+        description: bonusAmountTotal / ticketAmountTotal × 100
+securityDefinitions:
+  adminAuth:
+    type: apiKey
+    in: header
+    name: X-Admin-Key
+    description: API-ключ администратора для доступа к защищенным эндпоинтам
+tags:
+- name: Seats
+  description: Операции для проверки наличия мест
+- name: Bookings
+  description: Операции для бронирования и отмены билетов
+- name: Sessions
+  description: Операции для управления сеансами (только администратор)
+- name: Payments
+  description: Оплата бронирований и фиксация успешных платежей
+- name: Loyalty
+  description: Оформление бонусных карт, баланс и история операций
+- name: Reports
+  description: Административная отчётность по бонусной программе
